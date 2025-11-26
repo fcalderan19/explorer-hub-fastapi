@@ -84,6 +84,24 @@ export default function BusinessDashboard() {
     setUser(parsedUser)
     fetchMyBusinesses()
     fetchCapacityInfo()
+    
+    // Manejar retorno de MercadoPago
+    const urlParams = new URLSearchParams(window.location.search)
+    if (urlParams.get('subscription_success') === 'true') {
+      showAlert('success', '¡Pago exitoso!', 'Tu suscripción se activará en breve. Actualiza la página en unos segundos.')
+      // Limpiar la URL
+      window.history.replaceState({}, '', '/dashboard/business')
+      // Actualizar negocios después de 3 segundos
+      setTimeout(() => {
+        fetchMyBusinesses()
+      }, 3000)
+    } else if (urlParams.get('subscription_failure') === 'true') {
+      showAlert('error', 'Pago rechazado', 'El pago no pudo ser procesado. Por favor intenta nuevamente.')
+      window.history.replaceState({}, '', '/dashboard/business')
+    } else if (urlParams.get('subscription_pending') === 'true') {
+      showAlert('info', 'Pago pendiente', 'Tu pago está pendiente de aprobación. Te notificaremos cuando se procese.')
+      window.history.replaceState({}, '', '/dashboard/business')
+    }
   }, [router])
 
   const fetchMyBusinesses = async () => {
@@ -144,8 +162,18 @@ export default function BusinessDashboard() {
     setIsProcessing(true)
     try {
       const token = localStorage.getItem("token")
+      
+      if (!token) {
+        showAlert('error', 'Sesión requerida', 'Por favor inicia sesión para continuar')
+        setIsProcessing(false)
+        return
+      }
+      
+      console.log("Creando preferencia de pago para negocio:", selectedBusinessId) // Debug
+      
+      // Crear preferencia de pago en MercadoPago
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"}/api/businesses/${selectedBusinessId}/subscription`,
+        `${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"}/api/mercadopago/create-subscription-preference`,
         {
           method: "POST",
           headers: {
@@ -153,25 +181,31 @@ export default function BusinessDashboard() {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
+            business_id: parseInt(selectedBusinessId),
             tier: selectedTier,
             duration_days: parseInt(selectedDuration),
           }),
         }
       )
 
+      console.log("Respuesta recibida:", response.status) // Debug
+
       if (response.ok) {
-        showAlert('success', '¡Suscripción activada!', 'Tu negocio ahora tendrá prioridad en las búsquedas')
-        setIsSubscriptionDialogOpen(false)
-        setSelectedBusinessId("")
-        fetchMyBusinesses()
+        const data = await response.json()
+        console.log("Datos de preferencia:", data) // Debug
+        
+        // Redirigir a MercadoPago
+        console.log("Redirigiendo a MercadoPago:", data.init_point)
+        window.location.href = data.init_point
       } else {
         const error = await response.json()
-        showAlert('error', 'Error', error.detail || 'No se pudo activar la suscripción')
+        console.error("Error del servidor:", error) // Debug
+        showAlert('error', 'Error', error.detail || 'No se pudo crear la preferencia de pago')
+        setIsProcessing(false)
       }
     } catch (error) {
-      console.error("Error al activar suscripción:", error)
-      showAlert('error', 'Error', 'Error al activar la suscripción. Intenta nuevamente.')
-    } finally {
+      console.error("Error al crear preferencia de pago:", error)
+      showAlert('error', 'Error', 'Error al procesar la solicitud de compra. Intenta nuevamente.')
       setIsProcessing(false)
     }
   }
@@ -266,19 +300,19 @@ export default function BusinessDashboard() {
                           <SelectContent>
                             <SelectItem value="basic">
                               <div className="flex flex-col items-start">
-                                <span className="font-medium">Básico</span>
+                                <span className="font-medium">Básico - $5 USD/mes</span>
                                 <span className="text-xs text-muted-foreground">Prioridad en búsquedas</span>
                               </div>
                             </SelectItem>
                             <SelectItem value="premium">
                               <div className="flex flex-col items-start">
-                                <span className="font-medium">Premium</span>
+                                <span className="font-medium">Premium - $10 USD/mes</span>
                                 <span className="text-xs text-muted-foreground">Prioridad + Beneficios extra</span>
                               </div>
                             </SelectItem>
                             <SelectItem value="enterprise">
                               <div className="flex flex-col items-start">
-                                <span className="font-medium">Enterprise</span>
+                                <span className="font-medium">Enterprise - $15 USD/mes</span>
                                 <span className="text-xs text-muted-foreground">Máxima prioridad</span>
                               </div>
                             </SelectItem>
@@ -328,7 +362,7 @@ export default function BusinessDashboard() {
                         onClick={handleSubscribe} 
                         disabled={isProcessing || !selectedBusinessId}
                       >
-                        {isProcessing ? "Procesando..." : selectedBusiness?.is_subscribed ? "Renovar" : "Activar"}
+                        {isProcessing ? "Procesando..." : selectedBusiness?.is_subscribed ? "Renovar" : "Comprar"}
                       </Button>
                     </div>
                   </DialogContent>

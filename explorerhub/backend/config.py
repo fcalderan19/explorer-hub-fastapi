@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     openweather_api_key: Optional[str] = None
     openroute_api_key: Optional[str] = None
     
+    # MercadoPago
+    mercadopago_access_token: Optional[str] = None
+    mercadopago_public_key: Optional[str] = None
+    
     class Config:
         env_file = ".env"
 

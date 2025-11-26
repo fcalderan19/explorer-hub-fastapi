@@ -3,8 +3,8 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Crown, Calendar, AlertCircle, CheckCircle2 } from "lucide-react"
-import { useState } from "react"
+import { Crown, Calendar, AlertCircle, CheckCircle2, ShoppingCart } from "lucide-react"
+import { useState, useEffect } from "react"
 import {
   Dialog,
   DialogContent,
@@ -25,6 +25,30 @@ interface SubscriptionCardProps {
   onSubscriptionUpdate?: () => void
 }
 
+interface SubscriptionPrices {
+  basic: {
+    monthly_usd: number
+    monthly_ars: number
+    quarterly_ars: number
+    semiannual_ars: number
+    annual_ars: number
+  }
+  premium: {
+    monthly_usd: number
+    monthly_ars: number
+    quarterly_ars: number
+    semiannual_ars: number
+    annual_ars: number
+  }
+  enterprise: {
+    monthly_usd: number
+    monthly_ars: number
+    quarterly_ars: number
+    semiannual_ars: number
+    annual_ars: number
+  }
+}
+
 export function SubscriptionCard({
   businessId,
   businessName,
@@ -37,6 +61,42 @@ export function SubscriptionCard({
   const [selectedTier, setSelectedTier] = useState("basic")
   const [selectedDuration, setSelectedDuration] = useState("30")
   const [isLoading, setIsLoading] = useState(false)
+  const [prices, setPrices] = useState<SubscriptionPrices | null>(null)
+
+  // Cargar precios al montar el componente
+  useEffect(() => {
+    fetchPrices()
+  }, [])
+
+  const fetchPrices = async () => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"}/api/mercadopago/subscription-prices`
+      )
+      if (response.ok) {
+        const data = await response.json()
+        setPrices(data.prices)
+      }
+    } catch (error) {
+      console.error("Error al cargar precios:", error)
+    }
+  }
+
+  const getPrice = () => {
+    if (!prices) return { ars: 0, usd: 0 }
+    
+    const tierPrices = prices[selectedTier as keyof SubscriptionPrices]
+    if (!tierPrices) return { ars: 0, usd: 0 }
+    
+    const durationMap: { [key: string]: { ars: number; usd: number } } = {
+      "30": { ars: tierPrices.monthly_ars, usd: tierPrices.monthly_usd },
+      "90": { ars: tierPrices.quarterly_ars, usd: tierPrices.monthly_usd * 3 },
+      "180": { ars: tierPrices.semiannual_ars, usd: tierPrices.monthly_usd * 6 },
+      "365": { ars: tierPrices.annual_ars, usd: tierPrices.monthly_usd * 12 }
+    }
+    
+    return durationMap[selectedDuration] || { ars: 0, usd: 0 }
+  }
 
   const getDaysRemaining = () => {
     if (!subscriptionEndsAt) return 0
@@ -53,8 +113,19 @@ export function SubscriptionCard({
     setIsLoading(true)
     try {
       const token = localStorage.getItem("token")
+      
+      if (!token) {
+        alert("Por favor inicia sesión para continuar")
+        setIsDialogOpen(false)
+        setIsLoading(false)
+        return
+      }
+      
+      console.log("Creando preferencia de pago...") // Debug
+      
+      // Crear preferencia de pago en MercadoPago
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"}/api/businesses/${businessId}/subscription`,
+        `${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"}/api/mercadopago/create-subscription-preference`,
         {
           method: "POST",
           headers: {
@@ -62,24 +133,31 @@ export function SubscriptionCard({
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
+            business_id: businessId,
             tier: selectedTier,
             duration_days: parseInt(selectedDuration),
           }),
         }
       )
 
+      console.log("Respuesta recibida:", response.status) // Debug
+
       if (response.ok) {
-        alert("¡Suscripción activada exitosamente!")
-        setIsDialogOpen(false)
-        onSubscriptionUpdate?.()
+        const data = await response.json()
+        console.log("Datos de preferencia:", data) // Debug
+        
+        // Redirigir a MercadoPago
+        console.log("Redirigiendo a:", data.init_point)
+        window.location.href = data.init_point
       } else {
         const error = await response.json()
-        alert(`Error: ${error.detail || "No se pudo activar la suscripción"}`)
+        console.error("Error del servidor:", error) // Debug
+        alert(`Error: ${error.detail || "No se pudo crear la preferencia de pago"}`)
+        setIsLoading(false)
       }
     } catch (error) {
-      console.error("Error al activar suscripción:", error)
-      alert("Error al activar la suscripción")
-    } finally {
+      console.error("Error al crear preferencia de pago:", error)
+      alert("Error al procesar la solicitud de compra")
       setIsLoading(false)
     }
   }
@@ -194,12 +272,12 @@ export function SubscriptionCard({
             <DialogTrigger asChild>
               <Button className="flex-1" disabled={isLoading}>
                 <Crown className="h-4 w-4 mr-2" />
-                {isActive ? "Renovar" : "Activar"} Suscripción
+                {isActive ? "Renovar" : "Comprar"} Suscripción
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Activar Suscripción Premium</DialogTitle>
+                <DialogTitle>Comprar Suscripción Premium</DialogTitle>
                 <DialogDescription>
                   Mejora la visibilidad de tu negocio apareciendo primero en las búsquedas
                 </DialogDescription>
@@ -213,9 +291,9 @@ export function SubscriptionCard({
                       <SelectValue placeholder="Selecciona un plan" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="basic">Básico - Prioridad en búsquedas</SelectItem>
-                      <SelectItem value="premium">Premium - Prioridad + Beneficios extra</SelectItem>
-                      <SelectItem value="enterprise">Enterprise - Máxima prioridad</SelectItem>
+                      <SelectItem value="basic">Básico - $5 USD/mes - Prioridad en búsquedas</SelectItem>
+                      <SelectItem value="premium">Premium - $10 USD/mes - Prioridad + Beneficios extra</SelectItem>
+                      <SelectItem value="enterprise">Enterprise - $15 USD/mes - Máxima prioridad</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -236,8 +314,29 @@ export function SubscriptionCard({
                 </div>
 
                 <div className="p-4 bg-primary/5 rounded-lg space-y-2">
-                  <h4 className="font-semibold text-sm">Beneficios de la Suscripción:</h4>
-                  <ul className="text-sm space-y-1 text-muted-foreground">
+                  <h4 className="font-semibold text-sm">Resumen de Compra:</h4>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Plan:</span>
+                      <span className="font-medium">{getTierLabel(selectedTier)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Duración:</span>
+                      <span className="font-medium">{selectedDuration} días</span>
+                    </div>
+                    <div className="border-t pt-2 mt-2">
+                      <div className="flex justify-between font-semibold">
+                        <span>Total:</span>
+                        <span>
+                          ${getPrice().usd.toFixed(2)} USD
+                          <span className="text-xs text-muted-foreground ml-2">
+                            (≈ ${getPrice().ars.toFixed(0)} ARS)
+                          </span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <ul className="text-xs space-y-1 text-muted-foreground mt-3">
                     <li>✓ Tu negocio aparece primero en búsquedas</li>
                     <li>✓ Mayor visibilidad para usuarios</li>
                     <li>✓ Prioridad sobre competidores</li>
@@ -249,8 +348,9 @@ export function SubscriptionCard({
                 <Button variant="outline" className="flex-1" onClick={() => setIsDialogOpen(false)}>
                   Cancelar
                 </Button>
-                <Button className="flex-1" onClick={handleSubscribe} disabled={isLoading}>
-                  {isLoading ? "Procesando..." : "Confirmar"}
+                <Button className="flex-1 bg-blue-500 hover:bg-blue-600" onClick={handleSubscribe} disabled={isLoading || !prices}>
+                  <ShoppingCart className="h-4 w-4 mr-2" />
+                  {isLoading ? "Procesando..." : "Comprar"}
                 </Button>
               </div>
             </DialogContent>

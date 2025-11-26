@@ -9,6 +9,7 @@ from routes import auth, businesses, reviews, trips, promotions, bookings, notif
 from routes import debug as debug_routes
 from routes import weather, directions
 from routes import migrations
+from routes import mercadopago
 from pathlib import Path
 from flash_sale_checker import check_and_update_flash_sales, deactivate_expired_promotions
 
@@ -96,6 +97,7 @@ app.include_router(debug_routes.debug_router)  # Endpoint temporal de diagnósti
 app.include_router(weather.router, prefix="/api/weather", tags=["weather"])
 app.include_router(directions.router, prefix="/api/directions", tags=["directions"])
 app.include_router(migrations.router)  # Endpoints de migración
+app.include_router(mercadopago.router, prefix="/api/mercadopago", tags=["mercadopago"])  # MercadoPago integration
 
 # Mount uploads directory
 uploads_dir = Path("uploads")
