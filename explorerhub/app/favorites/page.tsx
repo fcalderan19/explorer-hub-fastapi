@@ -214,7 +214,7 @@ export default function FavoritesPage() {
               </Button>
             </div>
           ) : (
-            <Tabs defaultValue="activities" className="w-full">
+            <Tabs defaultValue="activities" className="w-full max-w-[1400px] mx-auto">
               <TabsList className="grid w-full grid-cols-2 mb-6">
                 <TabsTrigger value="activities">Actividades ({favorites.length})</TabsTrigger>
                 <TabsTrigger value="trips">Viajes ({favoriteTrips.length})</TabsTrigger>

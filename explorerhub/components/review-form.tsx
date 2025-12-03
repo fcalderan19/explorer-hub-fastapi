@@ -25,6 +25,8 @@ export function ReviewForm({ businessId, businessName, onSubmit, onCancel, showC
   const [title, setTitle] = useState("")
   const [text, setText] = useState("")
   const [errors, setErrors] = useState<{ rating?: string; title?: string; text?: string }>({})
+  
+  const MAX_TEXT_LENGTH = 300
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -110,15 +112,30 @@ export function ReviewForm({ businessId, businessName, onSubmit, onCancel, showC
           id="text"
           value={text}
           onChange={(e) => {
-            setText(e.target.value)
-            setErrors({ ...errors, text: undefined })
+            const newValue = e.target.value
+            if (newValue.length <= MAX_TEXT_LENGTH) {
+              setText(newValue)
+            }
+            if (errors.text) {
+              setErrors({ ...errors, text: undefined })
+            }
           }}
           placeholder="Comparte los detalles de tu experiencia..."
           rows={6}
           required
+          maxLength={MAX_TEXT_LENGTH}
           className={errors.text ? "border-red-500" : ""}
         />
-        {errors.text && <p className="text-sm text-red-600 mt-1">{errors.text}</p>}
+        <div className="flex justify-between items-center mt-1">
+          {errors.text ? (
+            <p className="text-sm text-red-600">{errors.text}</p>
+          ) : (
+            <div />
+          )}
+          <p className={`text-sm ${text.length >= MAX_TEXT_LENGTH ? 'text-red-600' : 'text-muted-foreground'}`}>
+            {text.length}/{MAX_TEXT_LENGTH}
+          </p>
+        </div>
       </div>
 
       <div className={styles.actions}>

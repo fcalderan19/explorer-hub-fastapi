@@ -76,18 +76,11 @@
 
 /* Attractions Grid - Horizontal Scroll */
 .attractionsGrid {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1.25rem;
-  overflow-x: auto;
-  overflow-y: hidden;
   padding: 1rem 0 2rem 0;
-  scroll-behavior: smooth;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-  scrollbar-color: #a08058 #e9e4df;
-  margin-left: auto;
-  margin-right: auto;
-  max-width: 1400px;
+  width: 100%;
 }
 
 .attractionsGrid::-webkit-scrollbar {
@@ -118,8 +111,57 @@
   display: flex;
   flex-direction: column;
   min-width: 320px;
-  max-width: 320px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   flex-shrink: 0;
+}
+
+.gridWithSidebar {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 16px;
+  align-items: start;
+  max-width: 1400px;
+  margin: auto;
+}
+
+/* Filter Toggle Button - Hidden by default, shown on tablet/mobile */
+.filterToggleButton {
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  background-color: white;
+  border: 1px solid #e5e5e5;
+  color: #573f23;
+  font-weight: 500;
+}
+
+.filterToggleButton:hover {
+  background-color: #f9f9f9;
+}
+
+.filterIcon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* Wrapper for filter sidebar with toggle behavior */
+.filterSidebarWrapper {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Desktop: always visible, styled as sidebar */
+@media (min-width: 1025px) {
+  .filterSidebarWrapper {
+    display: block;
+  }
+}
+
+.filterSidebarVisible {
+  /* State class for visibility control */
 }
 
 .attractionCard:hover {
@@ -327,20 +369,22 @@
 .uniqueBadge {
   display: inline-block;
   padding: 0.25rem 0.75rem;
-  background: linear-gradient(135deg, #8b6f47 0%, #6b5838 100%);
-  color: white;
-  border: 2px solid #000;
-  border-radius: 4px;
-  font-size: 0.7rem;
+  background-color: #f59e0b; /* Amber 500 - vivid but on-brand */
+  color: #1f2937; /* Gray 800 for good contrast */
+  border-radius: 9999px;
+  font-size: 0.75rem;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  flex-shrink: 0;
-  margin-left: auto;          /* empuja el badge al borde derecho */
-  align-self: center;
+  margin-left: 8px;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.15);
 }
+
+/* Dark mode adjustment */
+.dark .uniqueBadge {
+  background-color: #fbbf24; /* Amber 400 for dark mode pop */
+  color: #0b1220; /* Near-black for contrast */
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.15);
+}
+
 
 .uniqueBadge:hover {
   transform: translateY(-1px);
@@ -740,6 +784,61 @@
 }
 
 /* Responsive Adjustments */
+/* Large screens - reduce to 2 columns */
+@media (max-width: 1320px) {
+  .attractionsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Tablet */
+@media (max-width: 1024px) {
+  /* Show filter toggle button */
+  .filterToggleButton {
+    display: flex;
+  }
+
+  /* Hide sidebar by default on tablet/mobile */
+  .filterSidebarWrapper {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 1rem;
+    overflow-y: auto;
+  }
+
+  /* Show sidebar when toggle is active */
+  .filterSidebarVisible {
+    display: block;
+  }
+
+  .filterSidebarVisible > div {
+    max-width: 400px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Stack sidebar on top and use two columns for cards */
+  .gridWithSidebar {
+    grid-template-columns: 1fr;
+  }
+  .attractionsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .mapContainer {
+    max-width: 100%;
+  }
+}
+
+/* Mobile */
 @media (max-width: 768px) {
   .mainTitle {
     font-size: 1.5rem;
@@ -758,9 +857,20 @@
     flex: 1;
   }
 
+  /* Stack sidebar above grid and use single column */
+  .gridWithSidebar {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .attractionsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Make cards full-width on mobile */
   .attractionCard {
-    min-width: 280px;
-    max-width: 280px;
+    min-width: 100%;
+    max-width: 100%;
   }
 
   .imageContainer {
@@ -803,3 +913,28 @@
   font-size: 0.8rem;
   opacity: 0.7;
 }
+
+/* Infinite Scroll */
+.scrollSentinel {
+  grid-column: 1 / -1;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem 0;
+}
+
+.loadingMoreContainer {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: #a08058;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.loadingMoreContainer .loadingSpinner {
+  height: 1.5rem;
+  width: 1.5rem;
+}
+

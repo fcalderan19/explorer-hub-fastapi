@@ -105,7 +105,11 @@ async def signup(user: UserCreate, db = Depends(get_database)):
             "full_name": created_user["full_name"],
             "username": created_user.get("username"),
             "profile_picture": created_user.get("profile_picture"),
-            "role": created_user.get("role", "client")
+            "role": created_user.get("role", "client"),
+            "country": created_user.get("country"),
+            "birth_date": created_user.get("birth_date"),
+            "language": created_user.get("language", "es"),
+            "preferences": created_user.get("preferences", [])
         }
     }
 
@@ -141,7 +145,11 @@ async def login(user_credentials: UserLogin, db = Depends(get_database)):
             "full_name": user["full_name"],
             "username": user.get("username"),
             "profile_picture": user.get("profile_picture"),
-            "role": user.get("role", "client")
+            "role": user.get("role", "client"),
+            "country": user.get("country"),
+            "birth_date": user.get("birth_date"),
+            "language": user.get("language", "es"),
+            "preferences": user.get("preferences", [])
         }
     }
 
@@ -155,7 +163,11 @@ async def get_me(current_user = Depends(get_current_active_user)):
         "full_name": current_user.full_name,
         "username": current_user.username,
         "profile_picture": current_user.profile_picture,
-        "role": current_user.role
+        "role": current_user.role,
+        "country": getattr(current_user, "country", None),
+        "birth_date": getattr(current_user, "birth_date", None),
+        "language": getattr(current_user, "language", "es"),
+        "preferences": getattr(current_user, "preferences", [])
     }
 
 

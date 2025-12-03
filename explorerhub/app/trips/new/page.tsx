@@ -49,9 +49,22 @@ export default function NewTripPage() {
       setTimeout(() => {
         router.push("/trips")
       }, 1500)
-    } catch (error) {
-      console.error("Error creating trip:", error)
-      showAlert('error', 'Error', 'No se pudo crear el viaje. Por favor, intenta de nuevo.')
+    } catch (error: any) {
+      // Extract error message from the error object
+      let errorMessage = 'No se pudo crear el viaje. Por favor, intenta de nuevo.'
+      
+      if (error.message && error.message.includes('{"detail":')) {
+        try {
+          const match = error.message.match(/\{"detail":"([^"]+)"\}/)
+          if (match && match[1]) {
+            errorMessage = match[1]
+          }
+        } catch (e) {
+          // Keep default message if parsing fails
+        }
+      }
+      
+      showAlert('error', 'Error', errorMessage)
     } finally {
       setIsCreating(false)
     }

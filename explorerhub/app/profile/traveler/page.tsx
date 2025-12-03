@@ -127,7 +127,7 @@ export default function TravelerProfile() {
         <div className="max-w-6xl mx-auto">
           <div className="mb-8">
             <div>
-              <h1 className="text-3xl font-bold mb-2">¡Hola, {user.name}!</h1>
+              <h1 className="text-3xl font-bold mb-2">¡Hola, {user.full_name || user.name}!</h1>
               <p className="text-muted-foreground">Tu perfil de viajero</p>
             </div>
           </div>
@@ -271,7 +271,7 @@ export default function TravelerProfile() {
               <CardContent className="space-y-2">
                 <div className="flex justify-between py-2 border-b border-gray-200">
                   <span className="text-muted-foreground">Nombre completo:</span>
-                  <span className="font-medium">{user.name}</span>
+                  <span className="font-medium">{user.full_name || user.name}</span>
                 </div>
                 <div className="flex justify-between py-2 border-b border-gray-200">
                   <span className="text-muted-foreground">Email:</span>

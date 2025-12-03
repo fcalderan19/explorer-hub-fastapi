@@ -114,18 +114,9 @@ export function FlashSaleCarousel() {
     )
   }
 
-  // Si no hay ofertas flash, mostrar mensaje en lugar de null
+  // Si no hay ofertas flash, no renderizar nada
   if (flashPromotions.length === 0) {
-    return (
-      <div className={styles.carouselContainer}>
-        <div className={styles.carouselHeader}>
-          <h2 className={styles.carouselTitle}>⚡ Ofertas Relámpago</h2>
-        </div>
-        <div className={styles.loadingState}>
-          <p>No hay ofertas flash activas en este momento. ¡Vuelve pronto!</p>
-        </div>
-      </div>
-    )
+    return null
   }
 
   return (

@@ -52,7 +52,8 @@ export default function NewBusinessPage() {
         throw new Error(responseData.detail || "Failed to create business")
       }
       
-      router.push(`/business/${responseData.id}/edit`)
+      // Redirect to dashboard after successful creation
+      router.push("/dashboard/business")
     } catch (error) {
       console.error("Error creating business:", error)
       alert(`Error: ${error instanceof Error ? error.message : "Unknown error"}`)

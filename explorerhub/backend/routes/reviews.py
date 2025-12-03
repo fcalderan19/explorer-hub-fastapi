@@ -32,7 +32,7 @@ async def create_review(
     if existing_review:
         raise HTTPException(
             status_code=400,
-            detail="You have already reviewed this business"
+            detail="Ya has dejado una reseña en este negocio"
         )
     
     # Create review

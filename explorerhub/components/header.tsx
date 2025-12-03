@@ -21,7 +21,6 @@ import styles from "./header.module.css"
 export function Header() {
   const [user, setUser] = useState<any>(null)
   const router = useRouter()
-  console.log("Rendering Header, user:", user)
 
   useEffect(() => {
     const userData = getUser()
@@ -71,9 +70,6 @@ export function Header() {
                 </Link>
                 {user && (
                   <>
-                    <Link href="/bookings" className={styles.navLink}>
-                      Reservas
-                    </Link>
                     <Link href="/trips" className={styles.navLink}>
                       Viajes
                     </Link>

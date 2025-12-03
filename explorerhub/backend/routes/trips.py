@@ -70,6 +70,29 @@ async def create_trip(
     if isinstance(trip_dict["end_date"], str):
         trip_dict["end_date"] = datetime.fromisoformat(trip_dict["end_date"])
     
+    # Validate dates (compare only dates, not datetime)
+    today = datetime.now().date()
+    start_date = trip_dict["start_date"].date() if hasattr(trip_dict["start_date"], 'date') else trip_dict["start_date"]
+    end_date = trip_dict["end_date"].date() if hasattr(trip_dict["end_date"], 'date') else trip_dict["end_date"]
+    
+    if start_date < today:
+        raise HTTPException(
+            status_code=400,
+            detail="La fecha de inicio debe ser igual o posterior a hoy"
+        )
+    
+    if end_date < today:
+        raise HTTPException(
+            status_code=400,
+            detail="La fecha de fin debe ser igual o posterior a hoy"
+        )
+    
+    if end_date < start_date:
+        raise HTTPException(
+            status_code=400,
+            detail="La fecha de fin debe ser posterior o igual a la fecha de inicio"
+        )
+    
     trip_dict["user_id"] = str(current_user.id)
     trip_dict["activities"] = []
     trip_dict["collaborators"] = []
@@ -363,6 +386,29 @@ async def update_trip(
     if isinstance(update_data["end_date"], str):
         update_data["end_date"] = datetime.fromisoformat(update_data["end_date"])
     
+    # Validate dates (compare only dates, not datetime)
+    today = datetime.now().date()
+    start_date = update_data["start_date"].date() if hasattr(update_data["start_date"], 'date') else update_data["start_date"]
+    end_date = update_data["end_date"].date() if hasattr(update_data["end_date"], 'date') else update_data["end_date"]
+    
+    if start_date < today:
+        raise HTTPException(
+            status_code=400,
+            detail="La fecha de inicio debe ser igual o posterior a hoy"
+        )
+    
+    if end_date < today:
+        raise HTTPException(
+            status_code=400,
+            detail="La fecha de fin debe ser igual o posterior a hoy"
+        )
+    
+    if end_date < start_date:
+        raise HTTPException(
+            status_code=400,
+            detail="La fecha de fin debe ser posterior o igual a la fecha de inicio"
+        )
+    
     update_data["updated_at"] = datetime.utcnow()
     
     await db.trips.update_one(
@@ -409,6 +455,27 @@ async def add_activity_to_trip(
     collaborators = trip.get("collaborators", [])
     if trip["user_id"] != user_id and user_id not in collaborators:
         raise HTTPException(status_code=403, detail="Not authorized to modify this trip")
+    
+    # Validate activity date is within trip dates
+    trip_start = trip["start_date"]
+    trip_end = trip["end_date"]
+    
+    if isinstance(trip_start, str):
+        trip_start = datetime.fromisoformat(trip_start.replace('Z', '+00:00'))
+    if isinstance(trip_end, str):
+        trip_end = datetime.fromisoformat(trip_end.replace('Z', '+00:00'))
+    
+    # Only validate if scheduled_date is provided
+    if activity.scheduled_date:
+        activity_date = activity.scheduled_date.date() if hasattr(activity.scheduled_date, 'date') else activity.scheduled_date
+        trip_start_date = trip_start.date() if hasattr(trip_start, 'date') else trip_start
+        trip_end_date = trip_end.date() if hasattr(trip_end, 'date') else trip_end
+        
+        if activity_date < trip_start_date or activity_date > trip_end_date:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"La fecha de la actividad debe estar entre {trip_start_date.strftime('%d/%m/%Y')} y {trip_end_date.strftime('%d/%m/%Y')}"
+            )
     
     # Verify business exists
     business = await db.businesses.find_one({"id": activity.business_id})
@@ -485,6 +552,30 @@ async def update_activity_in_trip(
     collaborators = trip.get("collaborators", [])
     if trip["user_id"] != user_id and user_id not in collaborators:
         raise HTTPException(status_code=403, detail="Not authorized to modify this trip")
+    
+    # Validate scheduled_date if provided
+    if "scheduled_date" in activity_update:
+        trip_start = trip["start_date"]
+        trip_end = trip["end_date"]
+        
+        if isinstance(trip_start, str):
+            trip_start = datetime.fromisoformat(trip_start.replace('Z', '+00:00'))
+        if isinstance(trip_end, str):
+            trip_end = datetime.fromisoformat(trip_end.replace('Z', '+00:00'))
+        
+        scheduled_date = activity_update["scheduled_date"]
+        if isinstance(scheduled_date, str):
+            scheduled_date = datetime.fromisoformat(scheduled_date.replace('Z', '+00:00'))
+        
+        scheduled_date_only = scheduled_date.date() if hasattr(scheduled_date, 'date') else scheduled_date
+        trip_start_date = trip_start.date() if hasattr(trip_start, 'date') else trip_start
+        trip_end_date = trip_end.date() if hasattr(trip_end, 'date') else trip_end
+        
+        if scheduled_date_only < trip_start_date or scheduled_date_only > trip_end_date:
+            raise HTTPException(
+                status_code=400,
+                detail=f"La fecha de la actividad debe estar entre {trip_start_date.strftime('%d/%m/%Y')} y {trip_end_date.strftime('%d/%m/%Y')}"
+            )
     
     # Build update query for the specific activity
     update_query = {}
@@ -646,6 +737,16 @@ async def generate_trip(
     logger.info(f"[GENERATE] Starting with name={req.name}, budget={req.budget}, activities_per_day={req.activities_per_day}, cities={len(req.cities)}")
     if not req.cities:
         raise HTTPException(status_code=400, detail="Debe ingresar al menos una ciudad")
+    
+    # Validate dates
+    today = datetime.now().date()
+    for city_block in req.cities:
+        if city_block.start_date.date() < today:
+            raise HTTPException(status_code=400, detail="La fecha de inicio debe ser igual o posterior a hoy")
+        if city_block.end_date.date() < today:
+            raise HTTPException(status_code=400, detail="La fecha de fin debe ser igual o posterior a hoy")
+        if city_block.end_date.date() < city_block.start_date.date():
+            raise HTTPException(status_code=400, detail="La fecha de fin debe ser igual o posterior a la fecha de inicio")
 
     def budget_range(b: BudgetLevel):
         if b == BudgetLevel.bajo:
@@ -659,6 +760,9 @@ async def generate_trip(
 
     overall_start = min(c.start_date for c in req.cities)
     overall_end = max(c.end_date for c in req.cities)
+    
+    logger.info(f"[GENERATE] Date range calculated: start={overall_start}, end={overall_end}")
+    logger.info(f"[GENERATE] Individual cities: {[(c.city, c.start_date, c.end_date) for c in req.cities]}")
 
     destination = req.cities[0].city if len(req.cities) == 1 else "Multi-ciudad"
 

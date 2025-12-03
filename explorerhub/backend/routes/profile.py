@@ -22,6 +22,7 @@ class ProfileUpdate(BaseModel):
     country: Optional[str] = None
     language: Optional[str] = None
     preferences: Optional[list] = None
+    birth_date: Optional[str] = None
 
 
 @router.get("/me")
@@ -61,6 +62,31 @@ async def update_profile(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Username already taken"
+            )
+    
+    # Validate birth_date if provided (must be 18+ years old)
+    if "birth_date" in update_data and update_data["birth_date"]:
+        from datetime import datetime
+        try:
+            birth_date = datetime.fromisoformat(update_data["birth_date"].replace('Z', '+00:00'))
+            today = datetime.now()
+            age = today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
+            
+            if age < 18:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Debes ser mayor de edad"
+                )
+            
+            if birth_date > today:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="La fecha de nacimiento no puede estar en el futuro"
+                )
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Formato de fecha inválido"
             )
     
     if update_data:

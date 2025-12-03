@@ -17,6 +17,15 @@ from services.subscription_service import apply_subscription_update
 router = APIRouter(prefix="/api/businesses", tags=["businesses"])
 
 
+@router.get("/cities", response_model=List[str])
+async def get_cities(db = Depends(get_database)):
+    """Get list of unique cities from active businesses"""
+    cities = await db.businesses.distinct("location.city", {"is_active": True})
+    # Filter out None/empty values and sort
+    cities = [city for city in cities if city and city.strip()]
+    return sorted(cities)
+
+
 @router.post("/", response_model=Business, status_code=status.HTTP_201_CREATED)
 async def create_business(
     business: BusinessCreate,
@@ -136,8 +145,10 @@ async def get_businesses(
     # Ordenar priorizando negocios suscritos por nivel, luego por rating
     # Enterprise > Premium > Basic > Sin suscripción
     # Dentro de cada nivel, ordenar por rating más alto
-    cursor = db.businesses.find(query).skip(skip).limit(limit)
-    businesses = await cursor.to_list(length=None)  # Obtener todos para ordenar en Python
+    # Recuperamos TODOS los negocios que cumplen el filtro para poder ordenarlos
+    # y luego aplicar paginación consistente tras el ordenamiento.
+    cursor = db.businesses.find(query)
+    businesses = await cursor.to_list(length=None)  # Ordenaremos en memoria y luego haremos slice
     
     # Validar que la suscripción esté activa y asignar prioridad
     current_time = dt.utcnow()
@@ -172,7 +183,7 @@ async def get_businesses(
     # Ordenar por prioridad de suscripción (descendente) y luego por rating (descendente)
     businesses.sort(key=lambda x: (x.get("_sort_priority", 0), x.get("rating", 0)), reverse=True)
     
-    # Aplicar paginación después del ordenamiento
+    # Aplicar paginación SOLO una vez (skip/limit se aplican aquí tras ordenar)
     businesses = businesses[skip:skip + limit] if limit else businesses[skip:]
     
     businesses = serialize_docs(businesses)

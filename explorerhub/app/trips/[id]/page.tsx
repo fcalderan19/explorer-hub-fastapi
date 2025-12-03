@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import styles from "./page.module.css"
 import { WeatherCard } from "@/components/weather-card"
+import { SavedPlacesCard } from "@/components/saved-places-card"
 import { NearbyEventsCard } from "@/components/nearby-events-card"
 import { TransportRecommendations } from "@/components/transport-recommendations"
 import { CurrentLocationMapLink } from "@/components/current-location-map-link"
@@ -170,8 +171,10 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
       // Reload trip data
       loadTrip()
     } catch (error) {
-      console.error("Error removing activity:", error)
-      showAlert('error', 'Error', 'Error al eliminar la actividad')
+      const errorString = String(error)
+      const match = errorString.match(/\{"detail":"([^"]+)"\}/)
+      const errorMessage = match ? match[1] : 'Error al eliminar la actividad'
+      showAlert('error', 'Error', errorMessage)
     }
   }
 
@@ -192,8 +195,10 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
           showAlert('success', 'Viaje eliminado', 'El viaje ha sido eliminado exitosamente')
           router.push("/trips")
         } catch (error) {
-          console.error("Error deleting trip:", error)
-          showAlert('error', 'Error', 'No se pudo eliminar el viaje')
+          const errorString = String(error)
+          const match = errorString.match(/\{"detail":"([^"]+)"\}/)
+          const errorMessage = match ? match[1] : 'No se pudo eliminar el viaje'
+          showAlert('error', 'Error', errorMessage)
         }
       }
     })
@@ -212,8 +217,10 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
       // Reload trip data
       loadTrip()
     } catch (error) {
-      console.error("Error updating schedule:", error)
-      showAlert('error', 'Error', 'Error al actualizar la fecha programada')
+      const errorString = String(error)
+      const match = errorString.match(/\{"detail":"([^"]+)"\}/)
+      const errorMessage = match ? match[1] : 'Error al actualizar la fecha programada'
+      showAlert('error', 'Error', errorMessage)
     }
   }
 
@@ -232,8 +239,10 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
       // Reload trip data
       loadTrip()
     } catch (error) {
-      console.error("Error updating notes:", error)
-      showAlert('error', 'Error', 'Error al actualizar las notas')
+      const errorString = String(error)
+      const match = errorString.match(/\{"detail":"([^"]+)"\}/)
+      const errorMessage = match ? match[1] : 'Error al actualizar las notas'
+      showAlert('error', 'Error', errorMessage)
     }
   }
 
@@ -257,8 +266,10 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
       // Reload trip data
       loadTrip()
     } catch (error) {
-      console.error("Error adding image:", error)
-      showAlert('error', 'Error', 'Error al añadir la imagen')
+      const errorString = String(error)
+      const match = errorString.match(/\{"detail":"([^"]+)"\}/)
+      const errorMessage = match ? match[1] : 'Error al añadir la imagen'
+      showAlert('error', 'Error', errorMessage)
     }
   }
 
@@ -282,8 +293,10 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
       // Reload trip data
       loadTrip()
     } catch (error) {
-      console.error("Error updating image notes:", error)
-      showAlert('error', 'Error', 'Error al actualizar las notas de la imagen')
+      const errorString = String(error)
+      const match = errorString.match(/\{"detail":"([^"]+)"\}/)
+      const errorMessage = match ? match[1] : 'Error al actualizar las notas de la imagen'
+      showAlert('error', 'Error', errorMessage)
     }
   }
 
@@ -305,8 +318,10 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
       // Reload trip data
       loadTrip()
     } catch (error) {
-      console.error("Error removing image:", error)
-      showAlert('error', 'Error', 'Error al eliminar la imagen')
+      const errorString = String(error)
+      const match = errorString.match(/\{"detail":"([^"]+)"\}/)
+      const errorMessage = match ? match[1] : 'Error al eliminar la imagen'
+      showAlert('error', 'Error', errorMessage)
     }
   }
 
@@ -494,7 +509,7 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
               onAddActivity={handleAddActivity}
               onRemoveActivity={handleRemoveActivity}
               onUpdateSchedule={handleUpdateSchedule}
-              firstActivityMapLink={
+              /* firstActivityMapLink={
                 firstActivity ? (
                   <CurrentLocationMapLink
                     address={firstActivity.location?.address || ""}
@@ -502,7 +517,7 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
                     activityName={firstActivity.business_name}
                   />
                 ) : undefined
-              }
+              } */
               onUpdateNotes={handleUpdateNotes}
               onAddImage={handleAddImage}
               onUpdateImageNotes={handleUpdateImageNotes}
@@ -515,8 +530,17 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
             {/* Weather Card - Always show using trip destination */}
             <WeatherCard city={nearestCity} />
 
+            {/* Saved places from favorites matching city */}
+            <SavedPlacesCard 
+              tripCity={nearestCity} 
+              tripId={trip.id} 
+              tripStartDate={trip.start_date.split('T')[0]}
+              tripEndDate={trip.end_date.split('T')[0]}
+              onAdded={loadTrip} 
+            />
+
             {/* Nearby Events - Always show using nearest city */}
-            <NearbyEventsCard city={nearestCity} />
+            {/* <NearbyEventsCard city={nearestCity} /> */}
             <Card>
               <CardContent className={styles.cardContent}>
                 <h3 className={styles.sectionTitle}>Resumen del Viaje</h3>
@@ -569,7 +593,8 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
         onClose={() => setShowActivitySearch(false)}
         onAddActivity={(business, scheduledDate) => handleActivityAdded(business)}
         tripId={trip?.id || ""}
-        tripStartDate={trip?.start_date ? trip.start_date.split('T')[0] : undefined}
+        tripStartDate={trip?.start_date ? trip.start_date.split('T')[0] : ""}
+        tripEndDate={trip?.end_date ? trip.end_date.split('T')[0] : ""}
       />
 
       {/* Collaborators Dialog */}

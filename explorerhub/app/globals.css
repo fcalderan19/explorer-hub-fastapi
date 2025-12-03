@@ -126,6 +126,22 @@
   }
 }
 
+/* App root wrapper for full-height layout */
+.app-root {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-root > main {
+  flex: 1 0 auto;
+}
+
+.app-root footer {
+  margin-top: auto;
+  flex-shrink: 0;
+}
+
 /* Ensure dialogs and modals are always on top */
 [data-radix-dialog-overlay],
 [data-radix-dialog-content] {

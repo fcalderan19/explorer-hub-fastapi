@@ -80,27 +80,79 @@ export default function EditProfile() {
     setError("")
     setSuccess(false)
 
-    try {
-      // Simulate API call - in production, this would update the backend
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+    // Validate age (18+)
+    if (formData.date_of_birth) {
+      const birthDate = new Date(formData.date_of_birth)
+      const today = new Date()
+      let age = today.getFullYear() - birthDate.getFullYear()
+      const monthDiff = today.getMonth() - birthDate.getMonth()
+      
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--
+      }
+      
+      if (age < 18) {
+        setError("Debe ser mayor de 18 años")
+        setIsLoading(false)
+        return
+      }
+      
+      if (birthDate > today) {
+        setError("La fecha de nacimiento no puede estar en el futuro")
+        setIsLoading(false)
+        return
+      }
+    }
 
-      // Update local storage
+    try {
+      // Call backend API to update profile
+      const token = localStorage.getItem("token")
+      if (!token) {
+        throw new Error("No token found")
+      }
+
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/api/profile/update`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            full_name: formData.name,
+            country: formData.country,
+            birth_date: formData.date_of_birth,
+            language: formData.language,
+            preferences: formData.travel_preferences,
+          }),
+        }
+      )
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || "Error al actualizar el perfil")
+      }
+
+      const updatedUser = await response.json()
+
+      // Update local storage with response from backend
       const userData = localStorage.getItem("user")
       if (userData) {
         const parsedUser = JSON.parse(userData)
-        const updatedUser = { 
+        const newUserData = { 
           ...parsedUser, 
-          full_name: formData.name,
-          name: formData.name,
-          email: formData.email,
-          country: formData.country,
-          birth_date: formData.date_of_birth,
-          date_of_birth: formData.date_of_birth,
-          language: formData.language,
-          preferences: formData.travel_preferences,
-          travel_preferences: formData.travel_preferences,
+          ...updatedUser,
+          full_name: updatedUser.full_name,
+          name: updatedUser.full_name,
+          country: updatedUser.country,
+          birth_date: updatedUser.birth_date,
+          date_of_birth: updatedUser.birth_date,
+          language: updatedUser.language,
+          preferences: updatedUser.preferences,
+          travel_preferences: updatedUser.preferences,
         }
-        localStorage.setItem("user", JSON.stringify(updatedUser))
+        localStorage.setItem("user", JSON.stringify(newUserData))
       }
 
       setSuccess(true)
@@ -112,7 +164,7 @@ export default function EditProfile() {
         }
       }, 1500)
     } catch (err) {
-      setError("Error al actualizar el perfil")
+      setError(err instanceof Error ? err.message : "Error al actualizar el perfil")
     } finally {
       setIsLoading(false)
     }
@@ -222,6 +274,9 @@ export default function EditProfile() {
                   required
                   disabled={isLoading}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Debes tener al menos 18 años
+                </p>
               </div>
 
               <div className="space-y-2">

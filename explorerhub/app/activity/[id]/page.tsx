@@ -8,16 +8,20 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { Star, MapPin, Phone, Globe, DollarSign, Calendar, Heart, Loader2, ArrowLeft, Plus, MessageSquare, Trash2, Reply, AlertCircle, CheckCircle2, Tag } from "lucide-react"
+import { Star, MapPin, Phone, Globe, DollarSign, Calendar, Heart, Loader2, ArrowLeft, Plus, MessageSquare, Trash2, Reply, AlertCircle, CheckCircle2, Tag, Share2 } from "lucide-react"
 import { AuthRequiredDialog } from "@/components/auth-required-dialog"
 import { ReviewForm } from "@/components/review-form"
 import { PromotionCard } from "@/components/promotion-card"
-import { useAuthRequired } from "@/lib/hook/use-auth-required"
+import { useAuthRequired } from "@/lib/hooks/use-auth-required"
 import styles from "./page.module.css"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import dynamic from "next/dynamic"
+
+// Dynamic import for Map component to avoid SSR issues
+const ActivityMap = dynamic(() => import("./ActivityMapComponent"), { ssr: false })
 
 interface Business {
   id: number
@@ -292,6 +296,11 @@ export default function ActivityDetailPage({ params }: { params: Promise<{ id: s
   const [tripScheduledDate, setTripScheduledDate] = useState("")
   const [isLoadingTrips, setIsLoadingTrips] = useState(false)
   const [isSavingToTrip, setIsSavingToTrip] = useState(false)
+  // New add-to-trip flow (like /explore)
+  const [showTripSelector, setShowTripSelector] = useState<boolean>(false)
+  const [showDateDialog, setShowDateDialog] = useState<boolean>(false)
+  const [selectedTrip, setSelectedTrip] = useState<any>(null)
+  const [selectedDate, setSelectedDate] = useState<string>("")
   
   // Favorites
   const [isFavorite, setIsFavorite] = useState(false)
@@ -306,6 +315,9 @@ export default function ActivityDetailPage({ params }: { params: Promise<{ id: s
   
   // All promotions modal
   const [openAllPromotionsDialog, setOpenAllPromotionsDialog] = useState(false)
+  
+  // Recommended activities
+  const [recommendedActivities, setRecommendedActivities] = useState<Business[]>([])
   
   const [promotionForm, setPromotionForm] = useState({
     title: "",
@@ -368,6 +380,29 @@ export default function ActivityDetailPage({ params }: { params: Promise<{ id: s
 
         const data = await response.json()
         setActivity(data)
+        
+        // Fetch recommended activities based on same city and category
+        const fetchRecommended = async () => {
+          try {
+            const params = new URLSearchParams()
+            params.set("city", data.location.city)
+            if (data.categories && data.categories.length > 0) {
+              params.append("category", data.categories[0])
+            }
+            params.set("skip", "0")
+            params.set("limit", "3")
+            
+            const recResponse = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/api/businesses?${params.toString()}`)
+            if (recResponse.ok) {
+              const recData = await recResponse.json()
+              const filtered = recData.filter((b: Business) => b.id !== data.id).slice(0, 2)
+              setRecommendedActivities(filtered)
+            }
+          } catch (error) {
+            console.error("Error fetching recommended activities:", error)
+          }
+        }
+        fetchRecommended()
         
         // Check if current user is the owner
         const userData = localStorage.getItem("user")
@@ -499,6 +534,40 @@ export default function ActivityDetailPage({ params }: { params: Promise<{ id: s
         setIsTogglingFavorite(false)
       }
     })
+  }
+
+  const handleShare = () => {
+    try {
+      const url = window.location.href || `${window.location.origin}/activity/${id}`
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url)
+          .then(() => {
+            showAlert('success', 'Compartir', 'Enlace copiado al portapapeles')
+          })
+          .catch(() => {
+            fallbackCopy(url)
+            showAlert('success', 'Compartir', 'Enlace copiado al portapapeles')
+          })
+      } else {
+        fallbackCopy(url)
+        showAlert('success', 'Compartir', 'Enlace copiado al portapapeles')
+      }
+    } catch {
+      showAlert('error', 'Error', 'No se pudo copiar el enlace')
+    }
+  }
+
+  const fallbackCopy = (text: string) => {
+    try {
+      const tempInput = document.createElement('input')
+      tempInput.value = text
+      document.body.appendChild(tempInput)
+      tempInput.select()
+      document.execCommand('copy')
+      document.body.removeChild(tempInput)
+    } catch (e) {
+      console.error('Fallback copy failed:', e)
+    }
   }
 
   const handleBook = () => {
@@ -747,12 +816,37 @@ export default function ActivityDetailPage({ params }: { params: Promise<{ id: s
     setPriceCalculation(null)
   }
 
+  // Load user's trips (shared with add-to-trip flow)
+  const loadUserTrips = async (): Promise<any[]> => {
+    const token = localStorage.getItem("token")
+    if (!token) return []
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/api/trips/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (response.ok) {
+        const trips = await response.json()
+        setUserTrips(trips)
+        return trips
+      }
+    } catch (e) {
+      console.error('Error loading trips:', e)
+    }
+    return []
+  }
+
   const handleSaveToTrip = () => {
     console.log("handleSaveToTrip clicked")
     requireAuth(async () => {
-      // Fetch user's trips
+      const token = localStorage.getItem("token")
+      if (!token) {
+        setShowAuthDialog(true)
+        return
+      }
+
       setIsLoadingTrips(true)
-      setOpenSaveToTripDialog(true)
+      // Load trips then re-fetch to ensure freshness (mirrors /explore)
+      let trips = await loadUserTrips()
       try {
         const token = localStorage.getItem("token")
         const response = await fetch(
@@ -765,20 +859,71 @@ export default function ActivityDetailPage({ params }: { params: Promise<{ id: s
         )
         
         if (response.ok) {
-          const trips = await response.json()
+          trips = await response.json()
           setUserTrips(trips)
-        } else {
-          showAlert('error', 'Error', 'No se pudieron cargar tus viajes')
-          setUserTrips([])
         }
-      } catch (err) {
-        console.error("Error fetching trips:", err)
-        showAlert('error', 'Error', 'Error al cargar los viajes')
-        setUserTrips([])
+      } catch (e) {
+        console.error('Error reloading trips:', e)
       } finally {
         setIsLoadingTrips(false)
       }
+
+      if (!trips || trips.length === 0) {
+        showConfirm(
+          'Sin viajes',
+          'No tienes viajes. ¿Quieres crear uno ahora?',
+          () => router.push('/trips/new')
+        )
+        return
+      }
+
+      setShowTripSelector(true)
     })
+  }
+
+  const addToTrip = async (businessId: number, tripId: string, scheduledDate: string) => {
+    const token = localStorage.getItem("token")
+    if (!token) {
+      setShowAuthDialog(true)
+      return
+    }
+
+    if (!scheduledDate) {
+      showAlert('error', 'Fecha requerida', 'Por favor selecciona una fecha para la actividad')
+      return
+    }
+
+    try {
+      if (!activity) return
+      const scheduled_date = new Date(scheduledDate + 'T12:00:00').toISOString()
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/api/trips/${tripId}/activities`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          business_id: String(businessId),
+          business_name: activity.name,
+          scheduled_date,
+          notes: null,
+        }),
+      })
+
+      if (response.ok) {
+        showAlert('success', '¡Agregado!', 'Actividad agregada al itinerario')
+        setShowDateDialog(false)
+        setShowTripSelector(false)
+        setSelectedTrip(null)
+        setSelectedDate("")
+      } else {
+        const err = await response.json().catch(() => ({}))
+        showAlert('error', 'Error', err.detail || 'No se pudo agregar la actividad')
+      }
+    } catch (error) {
+      console.error('Error adding to trip:', error)
+      showAlert('error', 'Error', 'Error al agregar la actividad')
+    }
   }
 
   const handleConfirmSaveToTrip = async () => {
@@ -1385,8 +1530,6 @@ export default function ActivityDetailPage({ params }: { params: Promise<{ id: s
     }
   }
 
-  console.log("Render - showAuthDialog:", showAuthDialog)
-
   if (isLoading) {
     return (
       <div className={styles.pageContainer}>
@@ -1768,7 +1911,7 @@ export default function ActivityDetailPage({ params }: { params: Promise<{ id: s
                       size="lg"
                     >
                       <Plus className={styles.buttonIcon} />
-                      Guardar en Viaje
+                      Agregar a Viaje
                     </Button>
                     <Button 
                       onClick={handleToggleFavorite} 
@@ -1788,6 +1931,15 @@ export default function ActivityDetailPage({ params }: { params: Promise<{ id: s
                           {isFavorite ? "Guardado en Favoritos" : "Guardar como Favorito"}
                         </>
                       )}
+                    </Button>
+                    <Button 
+                      onClick={handleShare}
+                      variant="outline"
+                      className={styles.buttonFull}
+                      size="lg"
+                    >
+                      <Share2 className={styles.buttonIcon} />
+                      Compartir
                     </Button>
                   </div>
                 </CardContent>
@@ -1821,35 +1973,42 @@ export default function ActivityDetailPage({ params }: { params: Promise<{ id: s
                 </CardContent>
               </Card>
 
-              {/* Promotions Section */}
+              {/* Map Section */}
               <Card>
                 <CardContent className={styles.contactSection}>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <Tag className="h-5 w-5 text-primary flex-shrink-0" />
-                      <h3 className={styles.contactTitle}>
-                        Promociones ({promotions.length})
-                      </h3>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {promotions.length >= 3 && (
-                        <Button 
-                          onClick={() => setOpenAllPromotionsDialog(true)} 
-                          variant="outline"
-                          size="sm"
-                        >
-                          Ver todas
-                        </Button>
-                      )}
-                      {isOwner && (
-                        <Button onClick={() => setOpenPromotionDialog(true)} size="sm">
-                          <Plus className="h-4 w-4 mr-1" />
-                          Crear
-                        </Button>
-                      )}
-                    </div>
+                  <h3 className={styles.contactTitle}>Ubicación</h3>
+                  <div style={{ marginTop: '16px' }}>
+                    <ActivityMap
+                      businessName={activity.name}
+                      location={activity.location}
+                    />
                   </div>
-                  {promotions.length > 0 ? (
+                </CardContent>
+              </Card>
+
+              {/* Promotions Section */}
+              {promotions.length > 0 && (
+                <Card>
+                  <CardContent className={styles.contactSection}>
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <Tag className="h-5 w-5 text-primary flex-shrink-0" />
+                        <h3 className={styles.contactTitle}>
+                          Promociones ({promotions.length})
+                        </h3>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {promotions.length >= 3 && (
+                          <Button 
+                            onClick={() => setOpenAllPromotionsDialog(true)} 
+                            variant="outline"
+                            size="sm"
+                          >
+                            Ver todas
+                          </Button>
+                        )}
+                      </div>
+                    </div>
                     <div className="space-y-3">
                       {promotions.slice(0, 2).map((promotion) => (
                         <PromotionCard
@@ -1874,18 +2033,60 @@ export default function ActivityDetailPage({ params }: { params: Promise<{ id: s
                         />
                       ))}
                     </div>
-                  ) : (
-                    <div className="text-center py-4 text-sm text-muted-foreground">
-                      {isOwner 
-                        ? "No hay promociones. ¡Crea una para atraer clientes!"
-                        : "Sin promociones activas."
-                      }
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           </div>
+
+          {/* Recommended Activities Section */}
+          {recommendedActivities.length > 0 && (
+            <div className={styles.section}>
+              <h2 className={styles.sectionTitle}>También puede interesarte...</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {recommendedActivities.map((recActivity) => (
+                  <Card 
+                    key={recActivity.id}
+                    className="cursor-pointer hover:shadow-lg transition-shadow py-0"
+                    onClick={() => router.push(`/activity/${recActivity.id}`)}
+                  >
+                    <CardContent className="p-0">
+                      <div className="relative h-48 mb-3 rounded-t-lg overflow-hidden">
+                        <img
+                          src={recActivity.images[0] || "/images/placeholder-business.jpg"}
+                          alt={recActivity.name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="p-4">
+                        <h3 className="font-semibold text-lg mb-2">{recActivity.name}</h3>
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="flex items-center">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                              <Star
+                                key={i}
+                                className={`h-4 w-4 ${i < Math.floor(recActivity.rating) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`}
+                              />
+                            ))}
+                          </div>
+                          <span className="text-sm text-muted-foreground">
+                            {recActivity.rating.toFixed(1)} ({recActivity.review_count})
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
+                          {recActivity.description}
+                        </p>
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <MapPin className="h-4 w-4" />
+                          <span>{recActivity.location.city}, {recActivity.location.state}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </main>
 
@@ -2624,6 +2825,129 @@ export default function ActivityDetailPage({ params }: { params: Promise<{ id: s
               </Button>
             </DialogFooter>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Trip Selector Overlay (nuevo flujo) */}
+      {showTripSelector && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={() => setShowTripSelector(false)}
+        >
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-xl font-bold mb-4">Selecciona un viaje</h3>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {userTrips.map((trip) => (
+                <button
+                  key={trip.id}
+                  className="w-full p-3 text-left border rounded-lg hover:bg-gray-50 transition-colors"
+                  onClick={() => {
+                    setSelectedTrip(trip)
+                    setSelectedDate(trip.start_date.split('T')[0])
+                    setShowTripSelector(false)
+                    setShowDateDialog(true)
+                  }}
+                >
+                  <div className="font-medium">{trip.name}</div>
+                  <div className="text-sm text-gray-500">{trip.destination}</div>
+                  <div className="text-xs text-gray-400 mt-1">
+                    {new Date(trip.start_date).toLocaleDateString('es-ES')} - {new Date(trip.end_date).toLocaleDateString('es-ES')}
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="mt-4 flex gap-2">
+              <Button variant="outline" className="flex-1 bg-transparent" onClick={() => setShowTripSelector(false)}>
+                Cancelar
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={() => {
+                  setShowTripSelector(false)
+                  router.push('/trips/new')
+                }}
+              >
+                Crear Nuevo Viaje
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Date Selection Dialog (nuevo flujo) */}
+      <Dialog open={showDateDialog} onOpenChange={setShowDateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Seleccionar fecha</DialogTitle>
+            <DialogDescription>
+              Elige la fecha en la que realizarás esta actividad durante tu viaje
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {selectedTrip && (
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="text-sm font-medium">{selectedTrip.name}</p>
+                <p className="text-xs text-muted-foreground">{selectedTrip.destination}</p>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="activity-date">Fecha de la actividad</Label>
+              <Input
+                id="activity-date"
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                min={selectedTrip?.start_date?.split('T')[0]}
+                max={selectedTrip?.end_date?.split('T')[0]}
+                required
+              />
+              {selectedTrip && (
+                <p className="text-xs text-muted-foreground">
+                  Selecciona una fecha entre {new Date(selectedTrip.start_date).toLocaleDateString('es-ES')} y {new Date(selectedTrip.end_date).toLocaleDateString('es-ES')}
+                </p>
+              )}
+            </div>
+            {activity && (
+              <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
+                <img
+                  src={activity.images?.[0] || "/images/placeholder-business.jpg"}
+                  alt={activity.name}
+                  className="h-12 w-12 rounded object-cover shrink-0"
+                />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{activity.name}</p>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <MapPin className="h-3 w-3" />
+                    {activity.location.city}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDateDialog(false)
+                setSelectedTrip(null)
+                setSelectedDate("")
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                if (activity && selectedTrip && selectedDate) {
+                  addToTrip(activity.id, selectedTrip.id, selectedDate)
+                } else {
+                  showAlert('error', 'Fecha requerida', 'Selecciona una fecha dentro del rango del viaje')
+                }
+              }}
+              disabled={!selectedDate}
+            >
+              Agregar al itinerario
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

@@ -54,15 +54,12 @@
 }
 
 .backButtonContainer {
-  position: absolute;
-  top: 1.5rem;
-  left: 50%;
-  transform: translateX(-50%);
+  display: flex;
   max-width: 1280px;
-  margin: 0 auto;
-  margin-top: 1.5rem;
   width: 100%;
-  padding: 0 1rem;
+  margin: 0 auto;
+  padding-top: 2.5rem;
+  cursor: pointer;
 }
 
 @media (min-width: 768px) {
@@ -75,7 +72,8 @@
 .backButton {
   display: flex;
   gap: 0.5rem;
-  background-color: rgba(255, 255, 255, 0.9);
+  background-color: rgba(255, 255, 255);
+  color: rgba(0, 0, 0);
   backdrop-filter: blur(4px);
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
 }
@@ -368,7 +366,6 @@
 }
 
 .sidebarCard {
-  padding-top: 1.5rem;
 }
 
 .sidebarButtons {
@@ -388,7 +385,6 @@
 }
 
 .contactSection {
-  padding-top: 1.5rem;
 }
 
 .contactTitle {

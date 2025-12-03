@@ -94,9 +94,22 @@ export default function EditTripPage({ params }: { params: Promise<{ id: string 
       })
 
       setShowSuccessDialog(true)
-    } catch (error) {
-      console.error("Error updating trip:", error)
-      alert("Error al actualizar el viaje. Por favor, intenta de nuevo.")
+    } catch (error: any) {
+      // Extract error message from the error object
+      let errorMessage = 'Error al actualizar el viaje. Por favor, intenta de nuevo.'
+      
+      if (error.message && error.message.includes('{"detail":')) {
+        try {
+          const match = error.message.match(/\{"detail":"([^"]+)"\}/)
+          if (match && match[1]) {
+            errorMessage = match[1]
+          }
+        } catch (e) {
+          // Keep default message if parsing fails
+        }
+      }
+      
+      alert(errorMessage)
     } finally {
       setIsSaving(false)
     }

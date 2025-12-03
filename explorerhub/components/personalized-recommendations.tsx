@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from 'next/navigation'
-import { X, Search, DollarSign, Check } from 'lucide-react'
+import { useRouter } from "next/navigation"
+import { X, Search, DollarSign, Check, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import styles from "./personalized-recommendations.module.css"
@@ -25,30 +25,30 @@ export function PersonalizedRecommendations({ onClose }: PersonalizedRecommendat
   const [displayedTags, setDisplayedTags] = useState<string[]>([])
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [tagSearch, setTagSearch] = useState("")
+  const [tagsToShow, setTagsToShow] = useState(20)
 
   useEffect(() => {
-    // Fetch all businesses to extract unique tags
     const fetchTags = async () => {
       console.log("[v0] Starting to fetch tags from backend")
       try {
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:8000'
         console.log("[v0] Backend URL:", backendUrl)
-        
+
         const response = await fetch(`${backendUrl}/api/businesses`)
         console.log("[v0] Response status:", response.status)
-        
+
         if (response.ok) {
           const businesses = await response.json()
           console.log("[v0] Businesses fetched:", businesses.length)
-          
+
           const allTags = new Set<string>()
-          
+
           businesses.forEach((business: any) => {
             if (business.tags && Array.isArray(business.tags)) {
               business.tags.forEach((tag: string) => allTags.add(tag))
             }
           })
-          
+
           const uniqueTags = Array.from(allTags).sort()
           console.log("[v0] Unique tags found:", uniqueTags.length, uniqueTags)
           setAvailableTags(uniqueTags)
@@ -65,16 +65,13 @@ export function PersonalizedRecommendations({ onClose }: PersonalizedRecommendat
   }, [])
 
   useEffect(() => {
-    // Filter tags based on search
     if (tagSearch) {
-      const filtered = availableTags.filter(tag => 
-        tag.toLowerCase().includes(tagSearch.toLowerCase())
-      )
-      setDisplayedTags(filtered.slice(0, 20))
+      const filtered = availableTags.filter((tag) => tag.toLowerCase().includes(tagSearch.toLowerCase()))
+      setDisplayedTags(filtered.slice(0, tagsToShow))
     } else {
-      setDisplayedTags(availableTags.slice(0, 20))
+      setDisplayedTags(availableTags.slice(0, tagsToShow))
     }
-  }, [tagSearch, availableTags])
+  }, [tagSearch, availableTags, tagsToShow])
 
   const budgetLevels = [
     { value: 1, label: "$" },
@@ -85,7 +82,7 @@ export function PersonalizedRecommendations({ onClose }: PersonalizedRecommendat
 
   const toggleBudget = (value: number) => {
     if (selectedBudget.includes(value)) {
-      setSelectedBudget(selectedBudget.filter(b => b !== value))
+      setSelectedBudget(selectedBudget.filter((b) => b !== value))
     } else {
       setSelectedBudget([...selectedBudget, value])
     }
@@ -93,34 +90,39 @@ export function PersonalizedRecommendations({ onClose }: PersonalizedRecommendat
 
   const toggleTag = (tag: string) => {
     if (selectedTags.includes(tag)) {
-      setSelectedTags(selectedTags.filter(t => t !== tag))
+      setSelectedTags(selectedTags.filter((t) => t !== tag))
     } else {
       setSelectedTags([...selectedTags, tag])
     }
   }
 
+  const loadMoreTags = () => {
+    setTagsToShow((prev) => prev + 20)
+  }
+
+  const filteredTags = tagSearch
+    ? availableTags.filter((tag) => tag.toLowerCase().includes(tagSearch.toLowerCase()))
+    : availableTags
+  const hasMoreTags = filteredTags.length > tagsToShow
+
   const handleSearch = () => {
     console.log("[v0] Search clicked with filters:", { selectedBudget, selectedTags })
-    
-    // Build query params
+
     const params = new URLSearchParams()
-    
-    // Add budget filters
+
     if (selectedBudget.length > 0) {
       const minBudget = Math.min(...selectedBudget)
       const maxBudget = Math.max(...selectedBudget)
       params.set("minPrice", minBudget.toString())
       params.set("maxPrice", maxBudget.toString())
     }
-    
-    // Add tags as search query
+
     if (selectedTags.length > 0) {
       params.set("tags", selectedTags.join(","))
     }
 
     console.log("[v0] Navigating to explore with params:", params.toString())
-    
-    // Navigate to explore page with filters
+
     router.push(`/explore?${params.toString()}`)
     onClose()
   }
@@ -149,20 +151,19 @@ export function PersonalizedRecommendations({ onClose }: PersonalizedRecommendat
                 <button
                   key={budget.value}
                   className={`${styles.budgetButton} ${
-                    selectedBudget.includes(budget.value) ? styles.budgetButtonSelected : ''
+                    selectedBudget.includes(budget.value) ? styles.budgetButtonSelected : ""
                   }`}
                   onClick={() => toggleBudget(budget.value)}
                 >
                   {budget.label}
-                  {selectedBudget.includes(budget.value) && (
-                    <Check className={styles.checkIcon} />
-                  )}
+                  {selectedBudget.includes(budget.value) && <Check className={styles.checkIcon} />}
                 </button>
               ))}
             </div>
             {selectedBudget.length > 0 && (
               <p className={styles.selectedInfo}>
-                {selectedBudget.length} nivel{selectedBudget.length !== 1 ? 'es' : ''} seleccionado{selectedBudget.length !== 1 ? 's' : ''}
+                {selectedBudget.length} nivel{selectedBudget.length !== 1 ? "es" : ""} seleccionado
+                {selectedBudget.length !== 1 ? "s" : ""}
               </p>
             )}
           </div>
@@ -171,9 +172,9 @@ export function PersonalizedRecommendations({ onClose }: PersonalizedRecommendat
           <div className={styles.section}>
             <h3 className={styles.sectionTitle}>
               <Search className={styles.sectionIcon} />
-              Palabras clave (mostrando 20)
+              Palabras clave
             </h3>
-            
+
             {/* Search Input */}
             <div className={styles.searchWrapper}>
               <Search className={styles.searchIcon} />
@@ -191,26 +192,29 @@ export function PersonalizedRecommendations({ onClose }: PersonalizedRecommendat
               {displayedTags.map((tag) => (
                 <button
                   key={tag}
-                  className={`${styles.tagButton} ${
-                    selectedTags.includes(tag) ? styles.tagButtonSelected : ''
-                  }`}
+                  className={`${styles.tagButton} ${selectedTags.includes(tag) ? styles.tagButtonSelected : ""}`}
                   onClick={() => toggleTag(tag)}
                 >
                   {tag}
-                  {selectedTags.includes(tag) && (
-                    <Check className={styles.tagCheckIcon} />
-                  )}
+                  {selectedTags.includes(tag) && <Check className={styles.tagCheckIcon} />}
                 </button>
               ))}
             </div>
-            
-            {displayedTags.length === 0 && (
-              <p className={styles.noResults}>No se encontraron palabras clave</p>
+
+            {displayedTags.length === 0 && <p className={styles.noResults}>No se encontraron palabras clave</p>}
+
+            {hasMoreTags && (
+              <div className={styles.showMoreContainer}>
+                <Button variant="outline" onClick={loadMoreTags} className={styles.showMoreButton}>
+                  Mostrar más
+                </Button>
+              </div>
             )}
-            
+
             {selectedTags.length > 0 && (
               <p className={styles.selectedInfo}>
-                {selectedTags.length} palabra{selectedTags.length !== 1 ? 's' : ''} clave seleccionada{selectedTags.length !== 1 ? 's' : ''}
+                {selectedTags.length} palabra{selectedTags.length !== 1 ? "s" : ""} clave seleccionada
+                {selectedTags.length !== 1 ? "s" : ""}
               </p>
             )}
           </div>
@@ -218,11 +222,7 @@ export function PersonalizedRecommendations({ onClose }: PersonalizedRecommendat
 
         {/* Footer */}
         <div className={styles.footer}>
-          <Button
-            variant="outline"
-            onClick={onClose}
-            className={styles.cancelButton}
-          >
+          <Button variant="outline" onClick={onClose} className={styles.cancelButton}>
             Cancelar
           </Button>
           <Button

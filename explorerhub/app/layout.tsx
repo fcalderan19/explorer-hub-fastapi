@@ -19,7 +19,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={geistSans.variable}>
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        <div id="app-root" className="app-root">{children}</div>
+      </body>
     </html>
   )
 }

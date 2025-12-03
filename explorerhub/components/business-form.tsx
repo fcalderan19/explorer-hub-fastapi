@@ -263,6 +263,20 @@ export function BusinessForm({ onSubmit, initialData, isLoading }: BusinessFormP
           </div>
 
           <div className={styles.spaceY2}>
+            <Label htmlFor="tags">Palabras Clave</Label>
+            <Input
+              id="tags"
+              value={formData.tags}
+              onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
+              placeholder="ej: aventura, familia, naturaleza (separadas por comas)"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Agrega palabras clave que describan tu negocio, separadas por comas. Estas ayudarán a los usuarios a
+              encontrar tu actividad mediante recomendaciones personalizadas.
+            </p>
+          </div>
+
+          <div className={styles.spaceY2}>
             <div className="flex items-start space-x-3 p-4 border-2 border-dashed border-primary/30 rounded-lg bg-primary/5">
               <Checkbox
                 id="is_unique"

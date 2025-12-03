@@ -134,6 +134,7 @@ class BusinessPublic(BaseModel):
     is_active: bool
     allows_bookings: bool
     max_capacity: Optional[int] = None
+    is_unique: bool = False  # Added is_unique field to BusinessPublic model
     
     # Diferentes modelos de precios
     ticket_pricing: Optional[TicketPricing] = None

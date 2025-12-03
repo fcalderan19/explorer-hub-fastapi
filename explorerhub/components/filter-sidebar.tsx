@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Slider } from "@/components/ui/slider"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
@@ -10,37 +10,26 @@ import styles from "./filter-sidebar.module.css"
 
 interface FilterSidebarProps {
   onFilterChange?: (filters: any) => void
+  availableCategories?: string[]
 }
 
-export function FilterSidebar({ onFilterChange }: FilterSidebarProps) {
+export function FilterSidebar({ onFilterChange, availableCategories = [] }: FilterSidebarProps) {
   const [priceRange, setPriceRange] = useState([1, 4])
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [minRating, setMinRating] = useState(0)
-
-  const categories = [
-    "Restaurante",
-    "Actividad",
-    "Atracción",
-    "Naturaleza",
-    "Cultural",
-    "Entretenimiento",
-    "Compras",
-    "Vida Nocturna",
-    "Alojamiento",
-    "Bienestar",
-    "Histórico",
-    "Familiar",
-  ]
+  const onChangeRef = useRef<typeof onFilterChange | undefined>(onFilterChange)
+  useEffect(() => {
+    onChangeRef.current = onFilterChange
+  }, [onFilterChange])
 
   useEffect(() => {
-    if (onFilterChange) {
-      onFilterChange({
-        priceRange,
-        categories: selectedCategories,
-        minRating,
-      })
-    }
-  }, [priceRange, selectedCategories, minRating, onFilterChange])
+    // Emit changes only when local filter values change; avoid depending on callback identity
+    onChangeRef.current?.({
+      priceRange,
+      categories: selectedCategories,
+      minRating,
+    })
+  }, [priceRange, selectedCategories, minRating])
 
   const handleCategoryToggle = (category: string) => {
     setSelectedCategories((prev) =>
@@ -59,7 +48,7 @@ export function FilterSidebar({ onFilterChange }: FilterSidebarProps) {
       <div className={styles.categorySection}>
         <h3 className={styles.heading}>Categorías</h3>
         <div className={styles.spaceY3}>
-          {categories.map((category) => (
+          {availableCategories.map((category) => (
             <div key={category} className={styles.row}>
               <Checkbox
                 id={category}

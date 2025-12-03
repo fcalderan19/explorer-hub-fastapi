@@ -16,6 +16,7 @@ import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface Trip {
   id: string
@@ -33,6 +34,8 @@ export default function TripsPage() {
   const [isAuthorized, setIsAuthorized] = useState(false)
   const [trips, setTrips] = useState<Trip[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [availableCities, setAvailableCities] = useState<string[]>([])
+  const [loadingCities, setLoadingCities] = useState(false)
   const [alertDialog, setAlertDialog] = useState<{
     open: boolean
     type: 'success' | 'error' | 'confirm' | 'info'
@@ -67,7 +70,24 @@ export default function TripsPage() {
     }
     setIsAuthorized(true)
     loadTrips()
+    loadCities()
   }, [router])
+
+  const loadCities = async () => {
+    try {
+      setLoadingCities(true)
+      const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
+      const data = await fetch(`${baseUrl}/api/businesses/cities`)
+      if (data.ok) {
+        const cities = await data.json()
+        setAvailableCities(cities)
+      }
+    } catch (error) {
+      console.error("Error loading cities:", error)
+    } finally {
+      setLoadingCities(false)
+    }
+  }
 
   const loadTrips = async () => {
     try {
@@ -100,6 +120,22 @@ export default function TripsPage() {
   }
 
   const updateCity = (idx: number, key: 'city'|'start_date'|'end_date', value: string) => {
+    // Validate date format when updating date fields
+    if ((key === 'start_date' || key === 'end_date') && value) {
+      const parts = value.split('-')
+      if (parts.length === 3) {
+        const year = parseInt(parts[0])
+        const month = parseInt(parts[1])
+        const day = parseInt(parts[2])
+        
+        // Check if date is valid
+        const testDate = new Date(year, month - 1, day)
+        if (testDate.getFullYear() !== year || testDate.getMonth() !== month - 1 || testDate.getDate() !== day) {
+          showAlert('error', 'Fecha inválida', 'Fecha inválida')
+          return
+        }
+      }
+    }
     setGenCities(prev => prev.map((c, i) => i === idx ? { ...c, [key]: value } : c))
   }
 
@@ -108,10 +144,58 @@ export default function TripsPage() {
       showAlert('error', 'Falta el título', 'Ingresa un título para el viaje')
       return
     }
-    const norm = genCities.filter(c => c.city && c.start_date && c.end_date)
+
+    // Check each city for missing fields
+    for (let i = 0; i < genCities.length; i++) {
+      const city = genCities[i]
+      if (!city.city?.trim()) {
+        showAlert('error', 'Falta información', `Ingresa el nombre de la ciudad ${i + 1}`)
+        return
+      }
+      if (!city.start_date) {
+        showAlert('error', 'Fecha Invalida', `Ingresa una fecha de inicio válida para ${city.city}`)
+        return
+      }
+      if (!city.end_date) {
+        showAlert('error', 'Fecha Invalida', `Ingresa una fecha de fin válida para ${city.city}`)
+        return
+      }
+    }
+
+    const norm = genCities.filter(c => c.city?.trim() && c.start_date && c.end_date)
     if (norm.length === 0) {
       showAlert('error', 'Faltan ciudades', 'Ingresa al menos una ciudad con fechas')
       return
+    }
+    
+    // Validate that all dates are valid
+    for (const city of norm) {
+      const startDate = new Date(city.start_date)
+      const endDate = new Date(city.end_date)
+      
+      if (isNaN(startDate.getTime())) {
+        showAlert('error', 'Fecha inválida', 'Fecha inválida')
+        return
+      }
+      if (isNaN(endDate.getTime())) {
+        showAlert('error', 'Fecha inválida', 'Fecha inválida')
+        return
+      }
+      
+      // Check if the date string matches what was parsed (catches cases like 2025-11-31)
+      const startDateStr = city.start_date
+      const endDateStr = city.end_date
+      const reformattedStart = startDate.toISOString().split('T')[0]
+      const reformattedEnd = endDate.toISOString().split('T')[0]
+      
+      if (startDateStr !== reformattedStart) {
+        showAlert('error', 'Fecha inválida', 'Fecha inválida')
+        return
+      }
+      if (endDateStr !== reformattedEnd) {
+        showAlert('error', 'Fecha inválida', 'Fecha inválida')
+        return
+      }
     }
     const overallStart = new Date(Math.min(...norm.map(c => new Date(c.start_date).getTime())))
     const overallEnd = new Date(Math.max(...norm.map(c => new Date(c.end_date).getTime())))
@@ -160,7 +244,10 @@ export default function TripsPage() {
       // As a last resort, just reload list
       router.push('/trips')
     } catch (e) {
-      showAlert('error', 'No se pudo generar', 'Intenta nuevamente más tarde')
+      const errorString = String(e)
+      const match = errorString.match(/\{"detail":"([^"]+)"\}/)
+      const errorMessage = match ? match[1] : 'Intenta nuevamente más tarde'
+      showAlert('error', 'No se pudo generar', errorMessage)
     }
   }
 
@@ -180,9 +267,12 @@ export default function TripsPage() {
           
           // Reload trips list
           loadTrips()
-          showAlert('success', 'Viaje eliminado', 'El viaje ha sido eliminado exitosamente')
+          
+          // Show success message after a small delay
+          setTimeout(() => {
+            showAlert('success', 'Viaje eliminado', 'El viaje ha sido eliminado exitosamente')
+          }, 100)
         } catch (error) {
-          console.error("Error deleting trip:", error)
           showAlert('error', 'Error', 'No se pudo eliminar el viaje')
         }
       }
@@ -298,73 +388,125 @@ export default function TripsPage() {
 
       {/* Generator Dialog */}
       <Dialog open={generatorOpen} onOpenChange={setGeneratorOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Generar viaje automático</DialogTitle>
             <DialogDescription>Completa los datos para crear un itinerario</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 px-1">
             <div className="space-y-2">
               <Label>Título del viaje</Label>
               <Input value={genTitle} onChange={e => setGenTitle(e.target.value)} placeholder="Ej: Europa en 10 días" />
             </div>
-            <div className="space-y-2">
-              <Label>Preferencia de presupuesto</Label>
-              <select
-                className="w-full border rounded h-10 px-3"
-                value={genBudget}
-                onChange={e => setGenBudget(e.target.value as any)}
-              >
-                <option value="bajo">Económico</option>
-                <option value="medio">Estándar</option>
-                <option value="alto">Premium</option>
-              </select>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Preferencia de presupuesto</Label>
+                <Select value={genBudget} onValueChange={(val) => setGenBudget(val as any)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona presupuesto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bajo">Económico</SelectItem>
+                    <SelectItem value="medio">Estándar</SelectItem>
+                    <SelectItem value="alto">Premium</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Actividades por día</Label>
+                <Select value={String(genActivitiesPerDay)} onValueChange={(val) => setGenActivitiesPerDay(Number(val) as 1|2)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona cantidad" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1 actividad</SelectItem>
+                    <SelectItem value="2">2 actividades</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Actividades por día</Label>
-              <select
-                className="w-full border rounded h-10 px-3"
-                value={genActivitiesPerDay}
-                onChange={e => setGenActivitiesPerDay(Number(e.target.value) as 1|2)}
-              >
-                <option value="1">1 actividad</option>
-                <option value="2">2 actividades</option>
-              </select>
-            </div>
+
             <div className="space-y-3">
-              <Label>Ciudades</Label>
-              {genCities.map((c, idx) => (
-                <div key={idx} className="flex gap-2 items-end">
-                  <div className="md:col-span-2">
-                    <Label className="text-xs">Ciudad</Label>
-                    <Input value={c.city} onChange={e => updateCity(idx, 'city', e.target.value)} placeholder="Ciudad" />
+              <div className="flex items-center justify-between">
+                <Label>Ciudades e itinerario</Label>
+                <Button variant="outline" size="sm" onClick={addCity}>
+                  <Plus className="h-4 w-4 mr-1" />
+                  Agregar ciudad
+                </Button>
+              </div>
+              
+              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
+                {genCities.map((c, idx) => (
+                  <div key={idx} className="border rounded-lg p-3 space-y-3 bg-gray-50">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-700">Ciudad {idx + 1}</span>
+                      {genCities.length > 1 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeCity(idx)}
+                          className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label className="text-xs">Ciudad</Label>
+                      <Select 
+                        value={c.city} 
+                        onValueChange={(val) => updateCity(idx, 'city', val)}
+                        disabled={loadingCities}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={loadingCities ? "Cargando..." : "Selecciona ciudad"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableCities.map((city) => (
+                            <SelectItem key={city} value={city}>
+                              {city}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label className="text-xs">Fecha inicio</Label>
+                        <Input 
+                          type="date" 
+                          value={c.start_date} 
+                          onChange={e => updateCity(idx, 'start_date', e.target.value)}
+                          className="w-full"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Fecha fin</Label>
+                        <Input 
+                          type="date" 
+                          value={c.end_date} 
+                          onChange={e => updateCity(idx, 'end_date', e.target.value)}
+                          className="w-full"
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <Label className="text-xs">Inicio</Label>
-                    <Input type="date" value={c.start_date} onChange={e => updateCity(idx, 'start_date', e.target.value)} />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Fin</Label>
-                    <Input type="date" value={c.end_date} onChange={e => updateCity(idx, 'end_date', e.target.value)} />
-                  </div>
-                  <Button
-                    variant="destructive"
-                    title="Eliminar ciudad"
-                    onClick={() => removeCity(idx)}
-                    disabled={genCities.length === 1}
-                    className={genCities.length === 1 ? 'opacity-50 cursor-not-allowed' : ''}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
-          <div className="md:col-span-1 flex md:justify-end">
-            <Button variant="outline" className="w-auto" onClick={addCity}>Agregar ciudad</Button>
-          </div>
-          <DialogFooter>
-            <Button variant="secondary" onClick={submitGenerate}>Generar viaje</Button>
+          
+          <DialogFooter className="mt-6">
+            <Button variant="outline" onClick={() => setGeneratorOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={submitGenerate}>
+              Generar viaje
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

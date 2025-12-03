@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
@@ -17,11 +17,16 @@ import {
   Plus,
   MessageCircle,
   ChevronDown,
+  Filter,
 } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import dynamic from "next/dynamic"
 import styles from "./page.module.css"
+import { FilterSidebar } from "@/components/filter-sidebar"
 
 // Dynamic import for Map component to avoid SSR issues
 const Map = dynamic(() => import("./MapComponent"), { ssr: false })
@@ -60,6 +65,16 @@ export default function ExplorePage() {
   const [favoriteCounts, setFavoriteCounts] = useState<Record<number, number>>({})
   const [userTrips, setUserTrips] = useState<any[]>([])
   const [showTripSelector, setShowTripSelector] = useState<number | null>(null)
+  const [showDateDialog, setShowDateDialog] = useState(false)
+  const [selectedTrip, setSelectedTrip] = useState<any>(null)
+  const [selectedBusinessId, setSelectedBusinessId] = useState<number | null>(null)
+  const [selectedDate, setSelectedDate] = useState<string>("")
+  const [showFilters, setShowFilters] = useState(false)
+  const [page, setPage] = useState(1)
+  const [hasMore, setHasMore] = useState(true)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const observerTarget = useRef<HTMLDivElement>(null)
+  const PAGE_SIZE = 20
 
   useEffect(() => {
     const userData = localStorage.getItem("user")
@@ -101,7 +116,7 @@ export default function ExplorePage() {
   const fetchBusinesses = async () => {
     try {
       setIsLoading(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || "https://localhost:8000"}/api/businesses`)
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || "https://localhost:8000"}/api/businesses?skip=0&limit=${PAGE_SIZE}`)
 
       if (!response.ok) {
         throw new Error("Error al cargar los establecimientos")
@@ -109,6 +124,8 @@ export default function ExplorePage() {
 
       const data = await response.json()
       setActivities(data)
+      setPage(1)
+      setHasMore(data.length === PAGE_SIZE)
 
       // Load favorite counts for all businesses
       await loadFavoriteCounts(data)
@@ -119,6 +136,39 @@ export default function ExplorePage() {
       setIsLoading(false)
     }
   }
+
+  const loadMoreActivities = useCallback(async () => {
+    if (isLoadingMore || !hasMore) return
+
+    try {
+      setIsLoadingMore(true)
+      const nextPage = page + 1
+      const skip = page * PAGE_SIZE // page empieza en 1
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"}/api/businesses?skip=${skip}&limit=${PAGE_SIZE}`
+      const response = await fetch(url)
+
+      if (!response.ok) {
+        throw new Error("Error al cargar más establecimientos")
+      }
+
+      const data: Business[] = await response.json()
+
+      if (data.length === 0) {
+        setHasMore(false)
+      } else {
+        setActivities(prev => [...prev, ...data])
+        await loadFavoriteCounts(data)
+        setPage(nextPage)
+        if (data.length < PAGE_SIZE) {
+          setHasMore(false)
+        }
+      }
+    } catch (err) {
+      console.error("Error loading more businesses:", err)
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }, [page, isLoadingMore, hasMore, PAGE_SIZE])
 
   const loadFavorites = async () => {
     const token = localStorage.getItem("token")
@@ -238,9 +288,14 @@ export default function ExplorePage() {
     }
   }
 
-  const addToTrip = async (businessId: number, tripId: string) => {
+  const addToTrip = async (businessId: number, tripId: string, scheduledDate: string) => {
     const token = localStorage.getItem("token")
     if (!token) return
+
+    if (!scheduledDate) {
+      alert("Por favor selecciona una fecha para la actividad")
+      return
+    }
 
     try {
       const business = activities.find((a) => a.id === businessId)
@@ -255,14 +310,18 @@ export default function ExplorePage() {
         body: JSON.stringify({
           business_id: String(businessId),
           business_name: business.name,
-          scheduled_date: null,
+          scheduled_date,
           notes: null,
         }),
       })
 
       if (response.ok) {
         alert("¡Actividad agregada al itinerario!")
+        setShowDateDialog(false)
         setShowTripSelector(null)
+        setSelectedTrip(null)
+        setSelectedBusinessId(null)
+        setSelectedDate("")
       } else {
         alert("Error al agregar la actividad")
       }
@@ -281,12 +340,27 @@ export default function ExplorePage() {
     }
 
     // Load user trips if not loaded
-    if (userTrips.length === 0) {
+    let trips = userTrips
+    if (trips.length === 0) {
       await loadUserTrips()
+      // Re-fetch trips directly to ensure we have the latest data
+      try {
+        const response = await fetch("http://localhost:8000/api/trips/", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        })
+        if (response.ok) {
+          trips = await response.json()
+          setUserTrips(trips)
+        }
+      } catch (error) {
+        console.error("Error loading trips:", error)
+      }
     }
 
     // If user has no trips, redirect to create one
-    if (userTrips.length === 0) {
+    if (trips.length === 0) {
       if (confirm("No tienes viajes. ¿Quieres crear uno?")) {
         router.push("/trips/new")
       }
@@ -354,6 +428,9 @@ export default function ExplorePage() {
 
   const filteredActivities = useMemo(() => {
     let filtered = activities.filter((activity) => activity.is_active)
+    
+    // Debug: Log is_unique values
+    console.log("Activities with is_unique:", activities.filter(a => a.is_unique).map(a => ({ id: a.id, name: a.name, is_unique: a.is_unique })))
 
     if (searchQuery) {
       const searchTerms = searchQuery
@@ -412,6 +489,67 @@ export default function ExplorePage() {
     return filtered
   }, [activities, searchQuery, filters, sortBy])
 
+  const gridAvailableCategories = useMemo(() => {
+    const categorySet = new Set<string>()
+    activities
+      .filter((activity) => activity.is_active)
+      .forEach((activity) => {
+        activity.categories.forEach((cat) => categorySet.add(cat))
+      })
+    return Array.from(categorySet).sort()
+  }, [activities])
+
+  // Infinite scroll observer
+  useEffect(() => {
+    if (viewMode !== 'grid') return
+
+    const target = observerTarget.current
+    if (!target) return
+
+    console.log('[InfiniteScroll] Mount observer. hasMore=', hasMore, 'isLoadingMore=', isLoadingMore, 'page=', page)
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        if (entry.isIntersecting) {
+          console.log('[InfiniteScroll] Sentinel intersecting. hasMore=', hasMore, 'isLoadingMore=', isLoadingMore, 'page=', page)
+          if (hasMore && !isLoadingMore) {
+            loadMoreActivities()
+          }
+        }
+      },
+      {
+        root: null,
+        rootMargin: '200px 0px 400px 0px', // pre-carga antes de tocar fondo y extra margen inferior
+        threshold: 0 // disparamos al primer píxel visible
+      }
+    )
+
+    observer.observe(target)
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [hasMore, isLoadingMore, loadMoreActivities, viewMode, page])
+
+  // Fallback por scroll manual en caso de que el observer falle (algunas combinaciones de layout / CSS)
+  useEffect(() => {
+    if (viewMode !== 'grid') return
+    const onScroll = () => {
+      if (!hasMore || isLoadingMore) return
+      const scrollPosition = window.innerHeight + window.scrollY
+      const threshold = document.body.offsetHeight - 600 // a 600px del final
+      if (scrollPosition >= threshold) {
+        console.log('[InfiniteScroll][Fallback] Cerca del final, intentando cargar más. page=', page)
+        loadMoreActivities()
+      }
+    }
+    window.addEventListener('scroll', onScroll)
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [hasMore, isLoadingMore, loadMoreActivities, viewMode, page])
+
+  // Desactivamos backfill inicial para evitar doble request en carga
+
   return (
     <div className={styles.pageContainer}>
       <Header />
@@ -466,7 +604,37 @@ export default function ExplorePage() {
             <>
               {/* Grid View */}
               {viewMode === "grid" && (
-                <div className={styles.attractionsGrid}>
+                <>
+                  {/* Filter Toggle Button - visible only on < 1024px */}
+                  <Button
+                    variant="outline"
+                    className={styles.filterToggleButton}
+                    onClick={() => setShowFilters(!showFilters)}
+                  >
+                    <Filter className={styles.filterIcon} />
+                    Filtros
+                  </Button>
+
+                  <div className={styles.gridWithSidebar}>
+                    <div 
+                      className={`${styles.filterSidebarWrapper} ${showFilters ? styles.filterSidebarVisible : ''}`}
+                      onClick={() => setShowFilters(false)}
+                    >
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <FilterSidebar
+                          availableCategories={gridAvailableCategories}
+                          onFilterChange={(f) => {
+                            setFilters((prev) => ({
+                              ...prev,
+                              priceRange: f.priceRange ?? prev.priceRange,
+                              categories: Array.isArray(f.categories) ? f.categories : prev.categories,
+                              minRating: typeof f.minRating === 'number' ? f.minRating : prev.minRating,
+                            }))
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div className={styles.attractionsGrid}>
                   {filteredActivities.map((activity, index) => {
                     const currentImageIndex = imageIndexes[activity.id] || 0
                     const hasMultipleImages = activity.images.length > 1
@@ -605,7 +773,19 @@ export default function ExplorePage() {
                       </div>
                     )
                   })}
+
+                  {/* Infinite Scroll Loader */}
+                  <div ref={observerTarget} className={styles.scrollSentinel}>
+                    {isLoadingMore && (
+                      <div className={styles.loadingMoreContainer}>
+                        <Loader2 className={styles.loadingSpinner} />
+                        <span>Cargando más actividades...</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
+                </div>
+              </>
               )}
 
               {/* Map View */}
@@ -755,7 +935,7 @@ export default function ExplorePage() {
       {/* Trip Selector Modal */}
       {showTripSelector !== null && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
           onClick={() => setShowTripSelector(null)}
         >
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
@@ -765,10 +945,19 @@ export default function ExplorePage() {
                 <button
                   key={trip.id}
                   className="w-full p-3 text-left border rounded-lg hover:bg-gray-50 transition-colors"
-                  onClick={() => addToTrip(showTripSelector, trip.id)}
+                  onClick={() => {
+                    setSelectedTrip(trip)
+                    setSelectedBusinessId(showTripSelector)
+                    setSelectedDate(trip.start_date.split('T')[0])
+                    setShowTripSelector(null)
+                    setShowDateDialog(true)
+                  }}
                 >
                   <div className="font-medium">{trip.name}</div>
                   <div className="text-sm text-gray-500">{trip.destination}</div>
+                  <div className="text-xs text-gray-400 mt-1">
+                    {new Date(trip.start_date).toLocaleDateString('es-ES')} - {new Date(trip.end_date).toLocaleDateString('es-ES')}
+                  </div>
                 </button>
               ))}
             </div>
@@ -789,6 +978,82 @@ export default function ExplorePage() {
           </div>
         </div>
       )}
+
+      {/* Date Selection Dialog */}
+      <Dialog open={showDateDialog} onOpenChange={setShowDateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Seleccionar fecha</DialogTitle>
+            <DialogDescription>
+              Elige la fecha en la que realizarás esta actividad durante tu viaje
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {selectedTrip && (
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="text-sm font-medium">{selectedTrip.name}</p>
+                <p className="text-xs text-muted-foreground">{selectedTrip.destination}</p>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="activity-date">Fecha de la actividad</Label>
+              <Input
+                id="activity-date"
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                min={selectedTrip?.start_date?.split('T')[0]}
+                max={selectedTrip?.end_date?.split('T')[0]}
+                required
+              />
+              {selectedTrip && (
+                <p className="text-xs text-muted-foreground">
+                  Selecciona una fecha entre {new Date(selectedTrip.start_date).toLocaleDateString('es-ES')} y {new Date(selectedTrip.end_date).toLocaleDateString('es-ES')}
+                </p>
+              )}
+            </div>
+            {selectedBusinessId && activities.find(a => a.id === selectedBusinessId) && (
+              <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
+                <img
+                  src={activities.find(a => a.id === selectedBusinessId)?.images?.[0] || "/images/placeholder-business.jpg"}
+                  alt={activities.find(a => a.id === selectedBusinessId)?.name}
+                  className="h-12 w-12 rounded object-cover flex-shrink-0"
+                />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{activities.find(a => a.id === selectedBusinessId)?.name}</p>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <MapPin className="h-3 w-3" />
+                    {activities.find(a => a.id === selectedBusinessId)?.location.city}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDateDialog(false)
+                setSelectedTrip(null)
+                setSelectedBusinessId(null)
+                setSelectedDate("")
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedBusinessId && selectedTrip && selectedDate) {
+                  addToTrip(selectedBusinessId, selectedTrip.id, selectedDate)
+                }
+              }}
+              disabled={!selectedDate}
+            >
+              Agregar al itinerario
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Footer />
     </div>
